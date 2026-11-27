@@ -277,9 +277,11 @@ with tab3:
                'dividends included (very close to the S&P 500 with dividends).')
 
     st.subheader('Performance')
-    st.dataframe(perf.style.format('{:.2%}', na_rep = '-')
-                 .format('{:.2f}', subset = ['Sharpe ratio', 'Information ratio'], na_rep = '-'))
-
+    perf_text = perf.map(lambda v: '-' if pd.isna(v) else '{:.2%}'.format(v))
+    for col in ['Sharpe ratio', 'Information ratio']:
+        perf_text[col] = perf[col].map(lambda v: '-' if pd.isna(v) else '{:.2f}'.format(v))
+    st.dataframe(perf_text)
+    
     left, right = st.columns(2)
     with left:
         st.subheader('Tracking error over time')
