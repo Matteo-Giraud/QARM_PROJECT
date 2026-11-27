@@ -166,8 +166,7 @@ def optimize_portfolio(cov_matrix, w_snb, idx, sectors, w_max, sector_targets, m
     zeros = np.zeros(k)
 
     # 1. Fully invested weight constraint
-    constraints = [LinearConstraint(np.concatenate([np.ones(n), zeros]), ub = 1),
-                   LinearConstraint(np.concatenate([-np.ones(n), zeros]), ub = -1)]
+    constraints = [LinearConstraint(np.concatenate([np.ones(n), zeros]), lb = 1, ub = 1)]
 
     # 2. Long only with a maximum weight per stock. Same as LinearConstraint(np.eye(n), lb = 0, ub = w_max)
     # but with "bounds" scipy is a lot faster
@@ -224,6 +223,8 @@ def optimize_portfolio(cov_matrix, w_snb, idx, sectors, w_max, sector_targets, m
         res = minimize(objective, x0, jac = gradient, bounds = bounds, options = {'disp': False, 'maxiter': 1000},
                        constraints = all_constraints)
         note = 'sector constraints removed'
+        if not res.success:
+            note = 'the optimizer did not fully converge, weights are approximate'
 
     X = res.x
     te_copy = np.sqrt(2 * objective(X) / 10000)
@@ -352,20 +353,20 @@ def backtest(data, cov_matrices, n_stocks, te_budget, exclusions, w_max, turnove
             turnover = np.sum(np.abs(p['weights'].reindex(all_stocks, fill_value = 0)
                                      - previous_weights.reindex(all_stocks, fill_value = 0)))
 
-        # we hold the portfolio until the next rebalancing date
+        # We trade at the close of the rebalancing day, so returns start the day after
         start = q['rebalance_date']
         if k + 1 < len(quarters):
             end = quarters[k + 1]['rebalance_date']
-            period = returns.loc[start:end].iloc[:-1]
+            period = returns.loc[start:end].iloc[1:]
         else:
-            period = returns.loc[start:]
+            period = returns.loc[start:].iloc[1:] 
 
         held = p['weights'][p['weights'] > 0]
         r_portfolio, previous_weights = buy_and_hold(period, held)
         r_snb, _ = buy_and_hold(period, p['w_snb'][p['w_snb'] > 0])
         r_market, _ = buy_and_hold(period, p['w_mkt'])
 
-        # trading costs are paid on the day we rebalance
+        # Trading costs are taken from the first day's return
         cost = 0 if np.isnan(turnover) else turnover * cost_bp / 10000
         r_portfolio.iloc[0] = r_portfolio.iloc[0] - cost
 
